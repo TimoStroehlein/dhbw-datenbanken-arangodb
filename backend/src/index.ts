@@ -1,9 +1,12 @@
 import express from 'express';
+import bodyParser from 'body-parser';
 import { Database, aql } from 'arangojs';
 import { DocumentCollection, EdgeCollection } from "arangojs/collection";
 
 const app = express();
 const port = 8080;      // default port to listen
+
+app.use(bodyParser.json())
 
 const systemDb = new Database({
     url: 'http://arangodb:8529',
@@ -41,23 +44,13 @@ const myCol = async (): Promise<(DocumentCollection & EdgeCollection) | undefine
     }
 }
 
-const data = {
-    _key: 'dhbw',
-    name: 'DHBW',
-    location: 'Stuttgart'
-}
-
-const updateLocation = {
-    location: 'Heilbronn'
-}
-
 // define a route handler for the default page
 // add data
 app.post('/', async (req, res) => {
     const col = await myCol();
     try {
-        await col?.save(data);
-        console.log('Successfully inserted \'dhbw\'');
+        await col?.save(req.body);
+        console.log(`Successfully inserted \'${req.body._key}\'`);
         res.status(200).send({ message: 'Successfully inserted \'dhbw\'' });
     } catch (err) {
         console.error(err.message);
@@ -71,11 +64,11 @@ app.post('/aql', async (req, res) => {
     const col = await myCol();
     try {
         db?.query(aql`
-            INSERT ${data} INTO ${col}
+            INSERT ${req.body} INTO ${col}
             OPTIONS { ignoreErrors: true }
         `);
-        console.log('Successfully inserted \'dhbw\'');
-        res.status(200).send({ message: 'Successfully inserted \'dhbw\'' });
+        console.log(`Successfully inserted \'${req.body._key}\'`);
+        res.status(200).send({ message: `Successfully inserted \'${req.body._key}\'` });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -83,12 +76,12 @@ app.post('/aql', async (req, res) => {
 });
 
 // get data
-app.get('/', async (req, res) => {
+app.get('/:key', async (req, res) => {
     const col = await myCol();
     try {
-        const item = await col?.document('dhbw');
-        console.log('Successfully received \'dhbw\'');
-        res.status(200).send({ message: 'Successfully received \'dhbw\'', value: item });
+        const result = await col?.document(req.params.key);
+        console.log(`Successfully received \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully received \'${req.params.key}\'`, value: result });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -96,18 +89,18 @@ app.get('/', async (req, res) => {
 });
 
 // get data with aql
-app.get('/aql', async (req, res) => {
+app.get('/aql/:key', async (req, res) => {
     const db = await myDb();
     const col = await myCol();
     try {
         const cursor = await db?.query(aql`
             FOR item IN ${col}
-            FILTER item._key == "dhbw"
+            FILTER item._key == ${req.params.key}
             RETURN item
         `);
         const result = await cursor?.all();
-        console.log('Successfully received \'dhbw\'');
-        res.status(200).send({ message: 'Successfully received \'dhbw\'', value: result });
+        console.log(`Successfully received \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully received \'${req.params.key}\'`, value: result });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -115,12 +108,12 @@ app.get('/aql', async (req, res) => {
 });
 
 // update data
-app.patch('/', async (req, res) => {
+app.patch('/:key', async (req, res) => {
     const col = await myCol();
     try {
-        await col?.update('dhbw', updateLocation);
-        console.log('Successfully updated \'dhbw\'');
-        res.status(200).send({ message: 'Successfully updated \'dhbw\'' });
+        await col?.update(req.params.key, req.body);
+        console.log(`Successfully updated \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully updated \'${req.params.key}\'` });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -128,18 +121,18 @@ app.patch('/', async (req, res) => {
 });
 
 // update data with aql
-app.patch('/aql', async (req, res) => {
+app.patch('/aql/:key', async (req, res) => {
     const db = await myDb();
     const col = await myCol();
     try {
         await db?.query(aql`
-            UPDATE "dhbw" WITH {
-                location: "Heilbronn"
-            } IN ${col}
+            UPDATE ${req.params.key}
+            WITH ${req.body}
+            IN ${col}
             OPTIONS { ignoreErrors: true }
         `);
-        console.log('Successfully updated \'dhbw\'');
-        res.status(200).send({ message: 'Successfully updated \'dhbw\'' });
+        console.log(`Successfully updated \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully updated \'${req.params.key}\'` });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -147,12 +140,12 @@ app.patch('/aql', async (req, res) => {
 });
 
 // delete data
-app.delete('/', async (req, res) => {
+app.delete('/:key', async (req, res) => {
     const col = await myCol();
     try {
-        await col?.remove('dhbw');
-        console.log('Successfully removed \'dhbw\'');
-        res.status(200).send({ message: 'Successfully removed \'dhbw\'' });
+        await col?.remove(req.params.key);
+        console.log(`Successfully removed \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully removed \'${req.params.key}\'` });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -160,16 +153,16 @@ app.delete('/', async (req, res) => {
 });
 
 // delete data with aql
-app.delete('/aql', async (req, res) => {
+app.delete('/aql/:key', async (req, res) => {
     const db = await myDb();
     const col = await myCol();
     try {
         await db?.query(aql`
-            REMOVE "dhbw" IN ${col}
+            REMOVE ${req.params.key} IN ${col}
             OPTIONS { ignoreErrors: true }
         `);
-        console.log('Successfully removed \'dhbw\'');
-        res.status(200).send({ message: 'Successfully removed \'dhbw\'' });
+        console.log(`Successfully removed \'${req.params.key}\'`);
+        res.status(200).send({ message: `Successfully removed \'${req.params.key}\'` });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
