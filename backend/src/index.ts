@@ -15,27 +15,25 @@ const colName = 'myCollection';
 
 const myDb = async (): Promise<Database | undefined> => {
     try {
-        const myDb = await systemDb.createDatabase(dbName);
-        console.log(`Database created: ${dbName}`);
+        let myDb = systemDb.database(dbName);
+        if (!await myDb.exists()) {
+            myDb = await systemDb.createDatabase(dbName);
+            console.log(`Database created: ${dbName}`);
+        }
         return myDb;
     } catch (err) {
-        try {
-            return await systemDb.database(dbName);
-        } catch (err) {
-            console.error(`Error creating or receiving database: ${err}`);
-            return undefined;
-        }
+        console.error(`Error creating or receiving database: ${err}`);
+        return undefined;
     }
 }
 
 const myCol = async (): Promise<(DocumentCollection & EdgeCollection) | undefined> =>  {
-    const db = await myDb();
-    const col = db?.collection(colName);
     try {
-        await col?.create();
-    } catch(err) {}
-    try {
-        await col?.get();
+        const db = await myDb();
+        const col = db?.collection(colName);
+        if (!await col?.exists()) {
+            await col?.create();
+        }
         return col;
     } catch (err) {
         console.error(`Error creating or receiving collection: ${err}`)
@@ -73,8 +71,8 @@ app.post('/aql', async (req, res) => {
     const col = await myCol();
     try {
         db?.query(aql`
-            UPSERT { _key: "dhbw" }
-            INSERT ${data} IN ${col}
+            INSERT ${data} INTO ${col}
+            OPTIONS { ignoreErrors: true }
         `);
         console.log('Successfully inserted \'dhbw\'');
         res.status(200).send({ message: 'Successfully inserted \'dhbw\'' });
@@ -102,13 +100,14 @@ app.get('/aql', async (req, res) => {
     const db = await myDb();
     const col = await myCol();
     try {
-        const item = await db?.query(aql`
+        const cursor = await db?.query(aql`
             FOR item IN ${col}
             FILTER item._key == "dhbw"
             RETURN item
         `);
+        const result = await cursor?.all();
         console.log('Successfully received \'dhbw\'');
-        res.status(200).send({ message: 'Successfully received \'dhbw\'', value: item });
+        res.status(200).send({ message: 'Successfully received \'dhbw\'', value: result });
     } catch (err) {
         console.error(err.message);
         res.status(500).send({ error: err.message });
@@ -129,7 +128,7 @@ app.patch('/', async (req, res) => {
 });
 
 // update data with aql
-app.post('/aql', async (req, res) => {
+app.patch('/aql', async (req, res) => {
     const db = await myDb();
     const col = await myCol();
     try {
@@ -137,6 +136,7 @@ app.post('/aql', async (req, res) => {
             UPDATE "dhbw" WITH {
                 location: "Heilbronn"
             } IN ${col}
+            OPTIONS { ignoreErrors: true }
         `);
         console.log('Successfully updated \'dhbw\'');
         res.status(200).send({ message: 'Successfully updated \'dhbw\'' });
@@ -166,6 +166,7 @@ app.delete('/aql', async (req, res) => {
     try {
         await db?.query(aql`
             REMOVE "dhbw" IN ${col}
+            OPTIONS { ignoreErrors: true }
         `);
         console.log('Successfully removed \'dhbw\'');
         res.status(200).send({ message: 'Successfully removed \'dhbw\'' });
